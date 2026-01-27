@@ -4,7 +4,7 @@ from framework.graph.edge import GraphSpec
 from framework.graph.executor import ExecutionResult
 from framework.runtime.agent_runtime import AgentRuntime, create_agent_runtime
 from framework.runtime.execution_stream import EntryPointSpec
-from framework.llm import LiteLLMProvider
+from framework.llm import LiteLLMProvider, MockLLMProvider
 from framework.runner.tool_registry import ToolRegistry
 
 from .config import default_config, metadata
@@ -229,8 +229,10 @@ class OnlineResearchAgent:
                     server_config["cwd"] = str(agent_dir / server_config["cwd"])
                 tool_registry.register_mcp_server(server_config)
 
-        llm = None
-        if not mock_mode:
+        # LLM provider with mock mode support
+        if mock_mode:
+            llm = MockLLMProvider(model=self.config.model)
+        else:
             # LiteLLMProvider uses environment variables for API keys
             llm = LiteLLMProvider(
                 model=self.config.model,
