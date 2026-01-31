@@ -417,7 +417,7 @@ class GraphSpec(BaseModel):
     cleanup_llm_model: str | None = None
 
     # Execution limits
-    max_steps: int = Field(default=100, description="Maximum node executions before timeout")
+    max_steps: int = Field(default=100, ge=1, description="Maximum node executions before timeout")
     max_retries_per_node: int = 3
 
     # Metadata

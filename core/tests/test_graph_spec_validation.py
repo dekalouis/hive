@@ -1,14 +1,69 @@
 """
-Tests for GraphSpec.validate() — specifically validation of CONDITIONAL edges.
+Tests for GraphSpec.validate() — CONDITIONAL edges and execution limits.
 
 Covers:
 - CONDITIONAL edges without condition_expr fail validation
 - CONDITIONAL edges with condition_expr pass validation
 - Runtime behavior: CONDITIONAL with no expression returns False (fail closed)
+- max_steps must be >= 1 (Pydantic ge=1); 0 and negative raise ValidationError
 """
+
+from __future__ import annotations
+
+import pytest
+from pydantic import ValidationError
 
 from framework.graph.edge import EdgeCondition, EdgeSpec, GraphSpec
 from framework.graph.node import NodeSpec
+
+
+def _minimal_graph_spec_kwargs(**overrides: object) -> dict:
+    """Minimal kwargs to build a valid GraphSpec (for overriding max_steps)."""
+    return {
+        "id": "test-graph",
+        "goal_id": "goal-1",
+        "entry_node": "node1",
+        "nodes": [
+            NodeSpec(id="node1", name="N1", description="n1", node_type="function"),
+            NodeSpec(id="node2", name="N2", description="n2", node_type="function"),
+        ],
+        "edges": [
+            EdgeSpec(
+                id="e1",
+                source="node1",
+                target="node2",
+                condition=EdgeCondition.ON_SUCCESS,
+            ),
+        ],
+        **overrides,
+    }
+
+
+class TestGraphSpecExecutionLimits:
+    """Tests for max_steps bounds validation in GraphSpec."""
+
+    def test_max_steps_zero_raises_validation_error(self) -> None:
+        """GraphSpec with max_steps=0 should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            GraphSpec(**_minimal_graph_spec_kwargs(max_steps=0))
+        errors = exc_info.value.errors()
+        assert any("max_steps" in str(e.get("loc", ())) for e in errors) or any(
+            "ge" in str(e).lower() for e in errors
+        )
+
+    def test_max_steps_negative_raises_validation_error(self) -> None:
+        """GraphSpec with max_steps=-1 should raise ValidationError."""
+        with pytest.raises(ValidationError) as exc_info:
+            GraphSpec(**_minimal_graph_spec_kwargs(max_steps=-1))
+        errors = exc_info.value.errors()
+        assert any("max_steps" in str(e.get("loc", ())) for e in errors) or any(
+            "ge" in str(e).lower() for e in errors
+        )
+
+    def test_max_steps_one_constructs_successfully(self) -> None:
+        """GraphSpec with max_steps=1 (boundary) should construct successfully."""
+        graph = GraphSpec(**_minimal_graph_spec_kwargs(max_steps=1))
+        assert graph.max_steps == 1
 
 
 class TestConditionalEdgeValidation:
