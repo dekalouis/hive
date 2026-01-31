@@ -245,7 +245,8 @@ class AgentOrchestrator:
                     # Try fallback if available
                     if routing.fallback_agents:
                         fallback = routing.fallback_agents.pop(0)
-                        routing.selected_agents.append(fallback)
+                        if fallback in self._agents:
+                            routing.selected_agents.append(fallback)
 
         return OrchestratorResult(
             success=len(handled_by) > 0,
