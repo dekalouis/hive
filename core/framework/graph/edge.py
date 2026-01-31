@@ -158,7 +158,7 @@ class EdgeSpec(BaseModel):
     ) -> bool:
         """Evaluate a conditional expression."""
         if not self.condition_expr:
-            return True
+            return False
 
         # Build evaluation context
         # Include memory keys directly for easier access in conditions
@@ -571,6 +571,11 @@ class GraphSpec(BaseModel):
                 errors.append(f"Edge '{edge.id}' references missing source '{edge.source}'")
             if not self.get_node(edge.target):
                 errors.append(f"Edge '{edge.id}' references missing target '{edge.target}'")
+
+        # Check CONDITIONAL edges have condition_expr (align with MCP agent builder)
+        for edge in self.edges:
+            if edge.condition == EdgeCondition.CONDITIONAL and not edge.condition_expr:
+                errors.append(f"Conditional edge '{edge.id}' needs condition_expr")
 
         # Check for unreachable nodes
         # Start with main entry node and all entry points (for pause/resume architecture)
