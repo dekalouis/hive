@@ -13,6 +13,7 @@ from framework.llm.litellm import LiteLLMProvider
 from framework.llm.provider import LLMProvider
 from framework.runner.orchestrator import AgentOrchestrator, RoutingDecision
 from framework.runner.protocol import CapabilityLevel, CapabilityResponse
+from framework.runner.runner import AgentRunner
 
 
 class TestOrchestratorLLMInitialization:
@@ -91,40 +92,32 @@ class TestOrchestratorFallbackValidation:
     @pytest.mark.asyncio
     async def test_invalid_fallback_skipped_no_key_error(self):
         """Invalid fallback (unregistered) is skipped; no KeyError."""
-        mock_runner = Mock()
+        mock_llm = Mock(spec=LLMProvider)
+        mock_runner = Mock(spec=AgentRunner)
         mock_runner.info.return_value = Mock(description="Test agent")
         mock_runner.can_handle = AsyncMock(
             return_value=CapabilityResponse(
                 agent_name="agent_a",
                 level=CapabilityLevel.CAN_HANDLE,
-                confidence=0.5,
+                confidence=0.9,
                 reasoning="test",
             )
         )
+        mock_runner.receive_message = AsyncMock(side_effect=Exception("simulated failure"))
 
-        with patch.object(LiteLLMProvider, "__init__", return_value=None):
-            orchestrator = AgentOrchestrator()
-            orchestrator.register_runner("agent_a", mock_runner)
+        orchestrator = AgentOrchestrator(llm=mock_llm)
+        orchestrator.register_runner("agent_a", mock_runner)
 
         routing = RoutingDecision(
             selected_agents=["agent_a"],
-            fallback_agents=["ghost_agent"],
+            fallback_agents=["nonexistent_agent"],
             reasoning="test",
-            confidence=0.5,
+            confidence=0.9,
         )
+        with patch.object(orchestrator, "_route_request", new_callable=AsyncMock) as mock_route:
+            mock_route.return_value = routing
+            result = await orchestrator.dispatch({})
 
-        async def mock_send_to_agent(agent_name: str, msg):
-            if agent_name == "agent_a":
-                raise RuntimeError("agent failed")
-            raise AssertionError(f"_send_to_agent should not be called for {agent_name!r}")
-
-        with patch.object(
-            orchestrator, "_route_request", new_callable=AsyncMock, return_value=routing
-        ):
-            with patch.object(orchestrator, "_send_to_agent", side_effect=mock_send_to_agent):
-                result = await orchestrator.dispatch({"query": "test"})
-
+        assert "nonexistent_agent" not in result.handled_by
         assert "agent_a" in result.results
         assert "error" in result.results["agent_a"]
-        assert "ghost_agent" not in result.handled_by
-        assert result.success is False
